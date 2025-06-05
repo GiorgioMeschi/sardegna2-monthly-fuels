@@ -1,5 +1,5 @@
 # sardegna2-monthly-fuels
-operational chain and historical analyses on calabria at 20m resolution to produce monthly fuel maps using MCM drought data at 1km resolution 
+operational chain and historical analyses at 100m resolution to produce monthly fuel maps using MCM drought - data at 1km resolution 
 
 # env installation
 strongly suggested environment preparation:
