@@ -2,10 +2,10 @@
 #%%
 '''
 implement logic of fuel map creation if new spi/spei are available
-select the tile covering italy and clip + reproject over 22 calabria tiles
+select the tile covering italy and clip + reproject over tiles
 generate susceptibility per tile using the library
-merge the suscpetibilities to calabria
-generate the fuel map for calabria
+merge the suscpetibilities 
+generate the fuel map 
 generate 1 time only aspect and slope for risico txt
 add to risico txt the fuel type 
 '''
@@ -19,6 +19,7 @@ import geopandas as gpd
 from datetime import datetime as dt
 from datetime import timedelta
 import logging
+import pyproj
 
 try: 
     from osgeo import gdal
@@ -38,119 +39,30 @@ print(f)
 
 from risico_operational.settings import DATAPATH, TILES_DIR
 from model.run_model import compute_susceptibility
-from risico_operational.pipeline_functions import (clip_to_tiles, merge_susc_tiles, generate_fuel_map,
-                                                    write_risico_files, reproject_raster_as)
-                                
+from risico_operational.pipeline_functions import (get_spei1_rawfile, get_spei3_rawfile, get_spei6_rawfile,
+                                                    get_spi6_rawfile, get_spi1_rawfile, get_spi3_rawfile,
+                                                    find_latest,
+                                                    clip_to_tiles, merge_susc_tiles, generate_fuel_map,
+                                                    write_risico_files, reproject_raster_as, remove_borders)
+
+
+
 #%%
 
 AGGREGATIONS = [1, 3, 6] # month of aggregation for 1 index 
 AOI_PATH = f'{DATAPATH}/aoi'
-MERGED_SUSC_DIR = f'{DATAPATH}/susceptibility/v2' # path to save the merged susceptibility maps
-VEG_CAL_DIR = f'{DATAPATH}/raw/vegetation' # path to the vegetation map
+MERGED_SUSC_DIR = f'{DATAPATH}/susceptibility/v1' # path to save the merged susceptibility maps
+VEG_DIR = f'{DATAPATH}/raw/vegetation' # path to the vegetation map
 SUSC_THRESHOLD_DIR = f'{MERGED_SUSC_DIR}/thresholds' # path to the thresholds
 TOPOGRAPHIC_DATA = f'{DATAPATH}/raw/dem' # path to the topographic data
 OUTPUT_DIR = f'{DATAPATH}/risico' # path to save the output files
 
-HISTORICAL_RUN = False # if true change the current date and it will produce fuel map and risic points for that month
+# if true go and change manually the current date of your choice and it will produce fuel map and risico points for that month
+HISTORICAL_RUN = True 
 
-
-# functions for getting the available SPI files (4 files)
-def get_spi1_rawfile(date): 
-    aggr = 1
-    year = date.strftime('%Y')
-    month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
-    try:
-        day = os.listdir(basep)[-1]
-    except:
-        day = None
-    name = f'SPI{aggr}-MCM_{year}{month}{day}.tif'
-    path = f'{basep}/{day}/{name}'
-    return path
-
-def get_spi3_rawfile(date): 
-    aggr = 3
-    year = date.strftime('%Y')
-    month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
-    try:
-        day = os.listdir(basep)[-1]
-    except:
-        day = None
-    name = f'SPI{aggr}-MCM_{year}{month}{day}.tif'
-    path = f'{basep}/{day}/{name}'
-    return path
-
-def get_spi6_rawfile(date): 
-    aggr = 6
-    year = date.strftime('%Y')
-    month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
-    try:
-        day = os.listdir(basep)[-1]
-    except:
-        day = None
-    name = f'SPI{aggr}-MCM_{year}{month}{day}.tif'
-    path = f'{basep}/{day}/{name}'
-    return path
-
-def get_spei1_rawfile(date): 
-    aggr = 1
-    year = date.strftime('%Y')
-    month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
-    try:
-        day = os.listdir(basep)[-1]
-    except:
-        day = None
-    name = f'SPEI{aggr}-MCM-DROPS_{year}{month}{day}.tif'
-    path = f'{basep}/{day}/{name}'
-    return path
-
-def get_spei3_rawfile(date): 
-    aggr = 3
-    year = date.strftime('%Y')
-    month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
-    try:
-        day = os.listdir(basep)[-1]
-    except:
-        day = None
-    name = f'SPEI{aggr}-MCM-DROPS_{year}{month}{day}.tif'
-    path = f'{basep}/{day}/{name}'
-    return path
-
-def get_spei6_rawfile(date): 
-    aggr = 6
-    year = date.strftime('%Y')
-    month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
-    try:
-        day = os.listdir(basep)[-1]
-    except:
-        day = None
-    name = f'SPEI{aggr}-MCM-DROPS_{year}{month}{day}.tif'
-    path = f'{basep}/{day}/{name}'
-    return path
-
-
-def find_latest(path_fn, date):
-    oldest_date = date - timedelta(days=90)
-    current_date = date
-    found = False
-    while current_date > oldest_date:
-        rawpath = path_fn(current_date)
-        
-        if os.path.isfile(rawpath):
-            found = True
-            break
-        
-        current_date = current_date - timedelta(days=15)
-    if not found:
-        raise ValueError('Could not find data')
-
-    return rawpath, current_date
-
+pyproj_path = pyproj.datadir.get_data_dir()
+os.environ["GTIFF_SRS_SOURCE"] = "EPSG"
+os.environ["PROJ_DATA"] = pyproj_path
 
 
 def pipeline(date):
@@ -229,7 +141,7 @@ def pipeline(date):
     if not os.path.isfile(fuel12cl_path):
 
         tiles = os.listdir(TILES_DIR)
-        tile_df = gpd.read_file(f'{AOI_PATH}/grid_clean.geojsonl.json', driver='GeoJSONSeq')
+        tile_df = gpd.read_file(f'{AOI_PATH}/grid_wgs_clean.geojsonl.json', driver='GeoJSONSeq')
         tile_df_wgs = tile_df.to_crs('EPSG:4326') #proj of the input SPI
 
         # get the current months for spi and spei data on different aggregations
@@ -252,37 +164,40 @@ def pipeline(date):
         logging.info(f'\nstart computiong susceptibility per tile\n')
         compute_susceptibility(years = [year], months = [month])
 
+        # remove pixel border that was previouly buffered to avoid no issues at edges due to reprojections
+        remove_borders(tiles, year, month) 
+
         # Merge susceptibility maps
-        logging.info(f'\nget calabria susceptibility\n')
+        logging.info(f'\nget susceptibility\n')
         merged_susc_file = merge_susc_tiles(tiles, year, month, MERGED_SUSC_DIR)
+
+        # reproj as dem mantaining the same name
+        dem_path = f'{TOPOGRAPHIC_DATA}/dem_ispra_100m_32632_v2.tif'
+        os.rename(merged_susc_file, merged_susc_file.replace('.tif', '_notfixed.tif'))
+        merged_susc_file_notfixed = merged_susc_file.replace('.tif', '_notfixed.tif')
+        reproject_raster_as(merged_susc_file_notfixed, merged_susc_file, dem_path,
+                            input_crs='EPSG:32632', working_crs='EPSG:32632')
+        os.remove(merged_susc_file_notfixed)
+
 
         # Generate fuel maps
         logging.info(f'\nget fuel map\n')
-        veg_path = f'{VEG_CAL_DIR}/fuel_type.tif'
-        mapping_path = f'{VEG_CAL_DIR}/veg_to_tf_fake.json'
+        veg_path = f'{VEG_DIR}/vegetation_3dig_32632.tif'
+        mapping_path = f'{VEG_DIR}/veg_to_ft2.json'
         threashold_file = f'{SUSC_THRESHOLD_DIR}/thresholds.json'
         generate_fuel_map(merged_susc_file, threashold_file, veg_path, mapping_path, 
                            out_file = fuel12cl_path)
 
         #input/output for risico.txt
-        dem_path = f'{TOPOGRAPHIC_DATA}/dem_calabria_20m_3857.tif'
-        dem_wgs_path = f'{TOPOGRAPHIC_DATA}/dem_calabria_20m_wgs84.tif'
-        slope_wgs_path = f'{TOPOGRAPHIC_DATA}/slope_calabria_20m_wgs84.tif'
-        aspect_wgs_path = f'{TOPOGRAPHIC_DATA}/aspect_calabria_20m_wgs84.tif'
+        dem_wgs_path = f'{TOPOGRAPHIC_DATA}/dem_ispra_100m_wgs84.tif'
+        slope_wgs_path = f'{TOPOGRAPHIC_DATA}/slope_100m_wgs84.tif'
+        aspect_wgs_path = f'{TOPOGRAPHIC_DATA}/aspect_100m_wgs84.tif'
+        _slope_path = f'{DATAPATH}/susceptibility/static/susceptibility/slope.tif'
+        _aspect_path = f'{DATAPATH}/susceptibility/static/susceptibility/aspect.tif'
         if not os.path.exists(slope_wgs_path): # if slope and aspect already exist dont do it
-            # use gdal to create slope and aspect
-            logging.info(f'Calcualte slope')
-            temp_slope_path = slope_wgs_path.replace('.tif', '0.tif')
-            gdal.DEMProcessing(temp_slope_path, dem_path, 'slope')
-            reproject_raster_as(temp_slope_path, slope_wgs_path, dem_wgs_path)
-            os.remove(temp_slope_path)
-
-            temp_aspect_path = aspect_wgs_path.replace('.tif', '0.tif')
-            logging.info(f'Calcualte aspect')
-            gdal.DEMProcessing(temp_aspect_path, dem_path, 'aspect')
-            reproject_raster_as(temp_aspect_path, aspect_wgs_path, dem_wgs_path)
-            os.remove(temp_aspect_path)
-
+            logging.info(f'reproj slope and aspect')
+            reproject_raster_as(_slope_path, slope_wgs_path, dem_wgs_path)
+            reproject_raster_as(_aspect_path, aspect_wgs_path, dem_wgs_path)
 
         # reproject fuel map to wgs84
         fuel12_wgs_path = f'{OUTPUT_DIR}/fuel12cl_wgs84.tif'
@@ -292,7 +207,7 @@ def pipeline(date):
         logging.info(f'Fuel12cl reprojected to {fuel12_wgs_path}')
 
         # create a txt file in which each row has x and y coordinates and the value of the hazard
-        risico_outfile = f'{OUTPUT_DIR}/risico_calabria.txt'
+        risico_outfile = f'{OUTPUT_DIR}/risico.txt'
         logging.info(f'Write risico file to {risico_outfile}')
         if os.path.exists(risico_outfile):
             os.remove(risico_outfile)
@@ -304,19 +219,30 @@ def pipeline(date):
 if __name__ == '__main__':
 
     # get the current date
-    date = dt.now() #- timedelta(days=122)  
+    days = [31, 62, 93, 124, 155]  # days to go back for historical runs
+    for prev_day in days:
+        date = dt.now() - timedelta(days=prev_day)  
 
-    if HISTORICAL_RUN:
-        date_str = date.strftime('%Y%m%d')
-        # if historical run, use the first day of the month
-        OUTPUT_DIR = f'{OUTPUT_DIR}/RUN_HIST_{date_str}'
+        if HISTORICAL_RUN:
+            date_str = date.strftime('%Y%m%d')
+            # if historical run, use the first day of the month
+            OUTPUT_DIR = f'{OUTPUT_DIR}/RUN_HIST_{date_str}'
 
-    log_filename = f'{OUTPUT_DIR}/logs/pipeline_{date.strftime('%Y-%m-%d')}.log'
-    os.makedirs(os.path.dirname(log_filename), exist_ok=True)
-    logging.basicConfig(level=logging.INFO,
-                        format = '[%(asctime)s] %(filename)s: {%(lineno)d} %(levelname)s - %(message)s',
-                        datefmt ='%H:%M:%S',
-                        filename = log_filename)
-    
-    pipeline(date)
+        log_filename = f'{OUTPUT_DIR}/logs/pipeline_{date.strftime('%Y-%m-%d')}.log'
+        os.makedirs(os.path.dirname(log_filename), exist_ok=True)
+        logging.basicConfig(level=logging.INFO,
+                            format = '[%(asctime)s] %(filename)s: {%(lineno)d} %(levelname)s - %(message)s',
+                            datefmt ='%H:%M:%S',
+                            filename = log_filename)
+        
+        pipeline(date)
 
+# # read risico file lines
+# with open(f'{OUTPUT_DIR}/risico.txt', 'r') as f:
+#     lines = f.readlines()
+#     for line in lines[200:220]:  # print first 10 lines
+#         print(line.strip())
+
+
+
+# ras.save_raster_as(rio.open(dem_wgs_path).read(1), dem_wgs_path.replace('.tif', '_fixed.tif'), dem_wgs_path, dtype = 'float32')

@@ -8,16 +8,116 @@ import rasterio as rio
 from rasterio.merge import merge
 import geopandas as gpd 
 from rasterio.mask import mask as riomask
+from rasterio.windows import Window
 import time
 import json
 import subprocess
 # import boto3
 import logging 
-
+from datetime import timedelta
 from risico_operational.settings import TILES_DIR
 
-
+VS = 'v1'
  
+
+# get raw files from the server for SPI and SPEI variables, check if they exist for that year_month, and return the path.
+
+def get_spi1_rawfile(date): 
+    aggr = 1
+    year = date.strftime('%Y')
+    month = date.strftime('%m')
+    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
+    try:
+        day = os.listdir(basep)[-1]
+    except:
+        day = None
+    name = f'SPI{aggr}-MCM_{year}{month}{day}.tif'
+    path = f'{basep}/{day}/{name}'
+    return path
+
+def get_spi3_rawfile(date): 
+    aggr = 3
+    year = date.strftime('%Y')
+    month = date.strftime('%m')
+    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
+    try:
+        day = os.listdir(basep)[-1]
+    except:
+        day = None
+    name = f'SPI{aggr}-MCM_{year}{month}{day}.tif'
+    path = f'{basep}/{day}/{name}'
+    return path
+
+def get_spi6_rawfile(date): 
+    aggr = 6
+    year = date.strftime('%Y')
+    month = date.strftime('%m')
+    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
+    try:
+        day = os.listdir(basep)[-1]
+    except:
+        day = None
+    name = f'SPI{aggr}-MCM_{year}{month}{day}.tif'
+    path = f'{basep}/{day}/{name}'
+    return path
+
+def get_spei1_rawfile(date): 
+    aggr = 1
+    year = date.strftime('%Y')
+    month = date.strftime('%m')
+    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
+    try:
+        day = os.listdir(basep)[-1]
+    except:
+        day = None
+    name = f'SPEI{aggr}-MCM-DROPS_{year}{month}{day}.tif'
+    path = f'{basep}/{day}/{name}'
+    return path
+
+def get_spei3_rawfile(date): 
+    aggr = 3
+    year = date.strftime('%Y')
+    month = date.strftime('%m')
+    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
+    try:
+        day = os.listdir(basep)[-1]
+    except:
+        day = None
+    name = f'SPEI{aggr}-MCM-DROPS_{year}{month}{day}.tif'
+    path = f'{basep}/{day}/{name}'
+    return path
+
+def get_spei6_rawfile(date): 
+    aggr = 6
+    year = date.strftime('%Y')
+    month = date.strftime('%m')
+    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
+    try:
+        day = os.listdir(basep)[-1]
+    except:
+        day = None
+    name = f'SPEI{aggr}-MCM-DROPS_{year}{month}{day}.tif'
+    path = f'{basep}/{day}/{name}'
+    return path
+
+
+def find_latest(path_fn, date):
+    oldest_date = date - timedelta(days=90)
+    current_date = date
+    found = False
+    while current_date > oldest_date:
+        rawpath = path_fn(current_date)
+        
+        if os.path.isfile(rawpath):
+            found = True
+            break
+        
+        current_date = current_date - timedelta(days=15)
+    if not found:
+        raise ValueError('Could not find data')
+
+    return rawpath, current_date
+
 
 def clip_to_tiles(var, aggr, year: str, month: str, tile: str, 
                   tile_df: gpd.GeoDataFrame, current_year: str, current_month: str):
@@ -43,7 +143,7 @@ def clip_to_tiles(var, aggr, year: str, month: str, tile: str,
     out_folder = os.path.join(TILES_DIR, tile, 'climate', f'{current_year}_{current_month}')
     os.makedirs(out_folder, exist_ok=True)
     wgs_file = os.path.join(out_folder, f'{var}_{aggr}m_orig.tif')
-    reproj_out_file = os.path.join(out_folder, f'{var}_{aggr}m_bilinear_epsg3857.tif') # out filename
+    reproj_out_file = os.path.join(out_folder, f'{var}_{aggr}m_bilinear_epsg32632.tif') # out filename
 
     # clip and reproject
     tile_geom = tile_df[tile_df['id_sorted'] == int(tile[5:])].geometry.values[0]
@@ -61,14 +161,16 @@ def clip_to_tiles(var, aggr, year: str, month: str, tile: str,
         with rio.open(wgs_file, 'w', **out_meta) as dst:
             dst.write(out_image)
     
-    reference_file = os.path.join(TILES_DIR, tile, 'dem', 'dem_20m_3857.tif')
+    reference_file = os.path.join(TILES_DIR, tile, 'dem', 'dem_100m_32632.tif')
     with rio.open(reference_file) as ref:
         bounds = ref.bounds  # Extract bounds (left, bottom, right, top)
         xres = ref.transform[0]  # Pixel width
         yres = ref.transform[4]  # Pixel height
-        working_crs = 'EPSG:3857'  # Target CRS
+        working_crs = 'EPSG:32632'  # Target CRS
 
     # Use gdalwarp to reproject and match the bounds and resolution of the reference file
+    if os.path.exists(reproj_out_file):
+        os.remove(reproj_out_file)
     interpolation = 'bilinear'  # Interpolation method
     os.system(
         f'gdalwarp -t_srs {working_crs} -te {bounds.left} {bounds.bottom} {bounds.right} {bounds.top} '
@@ -81,13 +183,41 @@ def clip_to_tiles(var, aggr, year: str, month: str, tile: str,
     os.remove(wgs_file)
 
 
+def remove_borders(tiles, year, month):
+
+    for tile in tiles:
+        path = os.path.join(TILES_DIR, tile, 'susceptibility', VS, f'{year}_{month}', 'annual_maps', f'Annual_susc_{year}_{month}.tif')
+        with rio.open(path) as src:
+            width = src.width
+            height = src.height
+
+            # Define window to read, removing 10 pixels from each edge
+            window = Window(30, 30, width - 60, height - 60)
+
+            # Read the data within the window
+            data = src.read(1, window=window)
+            profile = src.profile
+
+            # Update the profile with new width, height, and transform
+            profile.update({
+                'height': data.shape[0],
+                'width': data.shape[1],
+                'transform': src.window_transform(window)
+            })
+
+        # Save the clipped tile (overwrite or to a new path)
+        os.remove(path)
+        with rio.open(path, 'w', **profile) as dst:
+            dst.write(data, 1)
+
+
 def merge_susc_tiles(tiles, year, month, outfolder):
 
-    vs = 'v2'
-    files_to_merge = [f"{TILES_DIR}/{tile}/susceptibility/{vs}/{year}_{month}/susceptibility/annual_maps/Annual_susc_{year}_{month}.tif"
+    
+    files_to_merge = [f"{TILES_DIR}/{tile}/susceptibility/{VS}/{year}_{month}/annual_maps/Annual_susc_{year}_{month}.tif"
                     for tile in tiles]
 
-    outfile = os.path.join(outfolder, f'susc_calabria_{year}_{month}.tif')
+    outfile = os.path.join(outfolder, f'susc_{year}_{month}.tif')
     # out = ras.merge_rasters(outfile, np.nan, 'first', *files_to_merge)
     ras = [rio.open(i) for i in files_to_merge]
     arr, trans = merge(ras, nodata = np.nan, method = 'first')
@@ -127,7 +257,7 @@ def generate_fuel_map(merged_susc_file, threshold_file, veg_path, mapping_path, 
     fft.hazard_12cl_assesment(**inputs) #save fuel map file on 'out_file' location
     
 
-def reproject_raster_as(in_file, out_file, reference_file, input_crs = 'EPSG:3857', working_crs = 'EPSG:4326'):
+def reproject_raster_as(in_file, out_file, reference_file, input_crs = 'EPSG:32632', working_crs = 'EPSG:4326'):
 
     with rio.open(reference_file) as ref:
         bounds = ref.bounds

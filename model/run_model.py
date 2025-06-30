@@ -1,6 +1,11 @@
 
 
 #%%
+# import os
+# os.chdir('/home/drought/workspaces/GM/sardegna2/fuel_maps/sardegna2-monthly-fuels')
+# import sys
+# sys.path.append('/home/drought/workspaces/GM/sardegna2/fuel_maps/sardegna2-monthly-fuels')
+
 
 from annual_wildfire_susceptibility.susceptibility import Susceptibility
 from risico_operational.settings import TILES_DIR, DATAPATH
@@ -14,16 +19,23 @@ from functools import wraps
 import shutil
 import pandas as pd
 
+import pyproj
+pyproj_path = pyproj.datadir.get_data_dir()
+import os
+os.environ["GTIFF_SRS_SOURCE"] = "EPSG"
+os.environ["PROJ_DATA"] = pyproj_path
+
 
 #%% inputs
 
-VS = 'v2'
+VS = 'v1'
 CONFIG = {     
     "batches" : 1, 
-    "nb_codes_list" : [1],
-    "list_features_to_remove" : ["veg_0"],
+    "nb_codes_list" : [0, 111, 112, 121, 122, 123,124, 131, 132, 133, 141, 142, 411, 412, 421, 422, 423, 511, 512, 521, 522, 523, 999, 255],
+    "list_features_to_remove" : [],
     "convert_to_month" : 1, # we turn on here here the month setting 
     "aggr_seasonal": 0, # put 1 if seasonal analysis, same as month but 1 is summer and 2 is winter, the aggr in fires will change accordingly.
+    # from here not needed. 
     "wildfire_years" : [],
     "nordic_countries" : {}, 
     "save_dataset" : 0,
@@ -116,18 +128,15 @@ def compute_month_susceptibility(tile, year, month):
 
     monthly_variable_names = [ 'SPI_1m', 'SPI_3m', 'SPI_6m',
                                 'SPEI_1m', 'SPEI_3m', 'SPEI_6m',
-                                # 'P_1m', 'P_3m', 'P_6m',
-                                # 'Tanomaly_1m', 'Tanomaly_3m', 'Tanomaly_6m',
-                                # 'T_1m', 'T_3m', 'T_6m',            
                                 ]
     
     climate_foldername = 'climate_1m_shift' if RUN == 'historical' else 'climate' # climate_1m_shift to historical run, climate for operational run
-    monthly_files = {f'{year}_{month}': {tiffile : f'{TILES_DIR}/{tile}/{climate_foldername}/{year}_{month}/{tiffile}_bilinear_epsg3857.tif'
+    monthly_files = {f'{year}_{month}': {tiffile : f'{TILES_DIR}/{tile}/{climate_foldername}/{year}_{month}/{tiffile}_bilinear_epsg32632.tif'
                         for tiffile in monthly_variable_names}
                             }                         
 
-    dem_path = f"{TILES_DIR}/{tile}/dem/dem_20m_3857.tif"
-    veg_path = f"{TILES_DIR}/{tile}/veg/veg_20m_3857.tif"
+    dem_path = f"{TILES_DIR}/{tile}/dem/dem_100m_32632.tif"
+    veg_path = f"{TILES_DIR}/{tile}/veg/veg_100m_32632.tif"
     optional_input_dict = {}
 
     working_directory = f'{DATAPATH}/ML/{tile}/susceptibility/{VS}/{year}_{month}'
@@ -221,7 +230,8 @@ def compute_susceptibility(years, months):
                 task_queue.put((year, month, tile))
 
     dynamic_worker(task_queue, 
-                   check_interval = 8)
+                   check_interval=6,
+                   max_workers=60)
 
 
 if RUN == 'historical':

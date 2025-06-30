@@ -5,20 +5,30 @@ import rasterio as rio
 import multiprocessing as mp
 import logging
 
+import pyproj
+pyproj_path = pyproj.datadir.get_data_dir()
+import os
+os.environ["GTIFF_SRS_SOURCE"] = "EPSG"
+os.environ["PROJ_DATA"] = pyproj_path
+
+# os.chdir('/home/drought/workspaces/GM/sardegna2/fuel_maps/sardegna2-monthly-fuels')
+# import sys
+# sys.path.append('/home/drought/workspaces/GM/sardegna2/fuel_maps/sardegna2-monthly-fuels')
+
 from annual_wildfire_susceptibility.supranational_model import SupranationalModel
 
 from risico_operational.settings import DATAPATH, TILES_DIR
 
 #%%
 
-VS = 'v3'
+VS = 'v1'
 CONFIG = {     
     "batches" : 1, 
-    "nb_codes_list" : [1],
-    "list_features_to_remove" : ["lat", "lon", "veg_0"],
+    "nb_codes_list" : [0, 111, 112, 121, 122, 123,124, 131, 132, 133, 141, 142, 411, 412, 421, 422, 423, 511, 512, 521, 522, 523, 999, 255],
+    "list_features_to_remove" : ["veg_0"],
     "convert_to_month" : 1, # we turn on here here the month setting 
     "aggr_seasonal": 0, # we turn off the seasonal analysis.
-    "wildfire_years" : [2011, 2012, 2013, 2014, 2015, 2015, 2017, 2018, 2019, 2020, 2021, 2022, 2023], 
+    "wildfire_years" : [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023], 
     "nordic_countries" : {}, # nothing to exclude
     "save_dataset" : 0, # no intermediate df to save
     "reduce_fire_points" : 50, #sampling of fires
@@ -52,10 +62,8 @@ os.makedirs(working_dir, exist_ok=True)
 # defines the input for dataset creation and model training
 tiles = os.listdir(TILES_DIR)
 tiles = [tile for tile in tiles if os.path.isdir(os.path.join(TILES_DIR, tile))]
-# eclude tile_7 because it has no fires
-tiles = [tile for tile in tiles if tile not in ['tile_7']]
 
-# tiles = ['tile_7'] # os.listdir(TILES_DIR) # tiles to clip the data on  # 
+# tiles = ['tile_4']
 
 print(len(tiles))
 
@@ -65,16 +73,16 @@ def create_partial_df(tile):
     # create a different instance for each tile
     instance_working_dir = f'{working_dir}/{tile}'
     os.makedirs(instance_working_dir, exist_ok=True)
+
+    # logging.basicConfig(filename=f'{instance_working_dir}/log.txt', level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
     supranationalmodel = SupranationalModel(instance_working_dir, CONFIG)
 
 
     # dinamic variables 
     monthly_variable_names = [ 
-                                # 'SPI_1m', 'SPI_3m', 'SPI_6m',
-                                # 'SPEI_1m', 'SPEI_3m', 'SPEI_6m',
-                                'P_1m', 'P_3m', #'P_6m',
-                                # 'Tanomaly_1m', 'Tanomaly_3m', 'Tanomaly_6m',
-                                'T_1m', 'T_3m', #'T_6m',            
+                                'SPI_1m', 'SPI_3m', 'SPI_6m',
+                                'SPEI_1m', 'SPEI_3m', 'SPEI_6m',
                                 ]
 
 
@@ -86,7 +94,7 @@ def create_partial_df(tile):
     monthly_files = {
         tile: {
             f'{year}_{month}': {
-                tiffile: f'{DATAPATH}/ML/{tile}/climate_1m_shift/{year}_{month}/{tiffile}_bilinear_epsg3857.tif'
+                tiffile: f'{DATAPATH}/ML/{tile}/climate_1m_shift/{year}_{month}/{tiffile}_bilinear_epsg32632.tif'
                 for tiffile in monthly_variable_names
             }
             for year in years for month in months
@@ -97,9 +105,9 @@ def create_partial_df(tile):
 
     # static variables
     mandatory_input_dict = {tile:
-                                [f"{TILES_DIR}/{tile}/dem/dem_20m_3857.tif",
-                                f"{TILES_DIR}/{tile}/veg/veg_20m_3857.tif",
-                                f"{TILES_DIR}/{tile}/fires/fires_2007_2023_epsg3857.shp"]
+                                [f"{TILES_DIR}/{tile}/dem/dem_100m_32632.tif",
+                                f"{TILES_DIR}/{tile}/veg/veg_100m_32632.tif",
+                                f"{TILES_DIR}/{tile}/fires/fires_2007_2023_epsg32632.shp"]
                             }
                                 # for tile in tiles}
 
@@ -168,7 +176,7 @@ _x.to_csv(f'{working_dir}/X_merged_no_coords.csv')
 
 
 model_path = f'{working_dir}/RF_bil_100t_15d_50samples.sav'
-X_path = f'{working_dir}/X_merged.csv'
+X_path = f'{working_dir}/X_merged_no_coords.csv'
 Y_path = f'{working_dir}/Y_merged.csv'
 # train the model
 supranationalmodel = SupranationalModel(working_dir, CONFIG)
