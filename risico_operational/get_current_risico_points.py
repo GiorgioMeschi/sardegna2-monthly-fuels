@@ -37,7 +37,7 @@ sys.path.append(f)
 os.chdir(f)
 print(f)
 
-from risico_operational.settings import DATAPATH, TILES_DIR
+from risico_operational.settings import HOME, DATAPATH, TILES_DIR, VS
 from model.run_model import compute_susceptibility
 from risico_operational.pipeline_functions import (get_spei1_rawfile, get_spei3_rawfile, get_spei6_rawfile,
                                                     get_spi6_rawfile, get_spi1_rawfile, get_spi3_rawfile,
@@ -45,20 +45,21 @@ from risico_operational.pipeline_functions import (get_spei1_rawfile, get_spei3_
                                                     clip_to_tiles, merge_susc_tiles, generate_fuel_map,
                                                     write_risico_files, reproject_raster_as, remove_borders)
 
+from risico_operational.views.plot_maps.plot import plot_maps
 
 
 #%%
 
 AGGREGATIONS = [1, 3, 6] # month of aggregation for 1 index 
 AOI_PATH = f'{DATAPATH}/aoi'
-MERGED_SUSC_DIR = f'{DATAPATH}/susceptibility/v1' # path to save the merged susceptibility maps
+MERGED_SUSC_DIR = f'{DATAPATH}/susceptibility/{VS}' # path to save the merged susceptibility maps
 VEG_DIR = f'{DATAPATH}/raw/vegetation' # path to the vegetation map
 SUSC_THRESHOLD_DIR = f'{MERGED_SUSC_DIR}/thresholds' # path to the thresholds
 TOPOGRAPHIC_DATA = f'{DATAPATH}/raw/dem' # path to the topographic data
 OUTPUT_DIR = f'{DATAPATH}/risico' # path to save the output files
 
 # if true go and change manually the current date of your choice and it will produce fuel map and risico points for that month
-HISTORICAL_RUN = True 
+HISTORICAL_RUN = False 
 
 pyproj_path = pyproj.datadir.get_data_dir()
 os.environ["GTIFF_SRS_SOURCE"] = "EPSG"
@@ -138,8 +139,17 @@ def pipeline(date):
          )
     
     fuel12cl_path = f'{out_monthly_fuel_folder}/{fuel_filename}'
-    if not os.path.isfile(fuel12cl_path):
 
+    # write a txt with the fuel nam
+    fuel12cl_txt = f'{OUTPUT_DIR}/metadata.txt'
+    if os.path.exists(fuel12cl_txt):
+        os.remove(fuel12cl_txt)
+    with open(fuel12cl_txt, 'w') as f:
+        f.write(f'{fuel_filename}\n')
+    
+    # generate susc, fuel and risico points
+    if not os.path.isfile(fuel12cl_path):
+  
         tiles = os.listdir(TILES_DIR)
         tile_df = gpd.read_file(f'{AOI_PATH}/grid_wgs_clean.geojsonl.json', driver='GeoJSONSeq')
         tile_df_wgs = tile_df.to_crs('EPSG:4326') #proj of the input SPI
@@ -213,13 +223,34 @@ def pipeline(date):
             os.remove(risico_outfile)
 
         write_risico_files(fuel12_wgs_path, slope_wgs_path, aspect_wgs_path, risico_outfile)
-        logging.info(f'{risico_outfile} created!!!')        
+        logging.info(f'{risico_outfile} created!!!')    
+
+    
+        # generate png and move to viewer
+        dyn_output_folder, static_output_folder = plot_maps()
+        name = 'sardegna-medstar'
+        destination_repo = f"{HOME}/viewer/ml-viewer"
+        destination_subfolder = os.path.join(destination_repo, "data", name) 
+        os.system(f"cp -r {dyn_output_folder} {destination_subfolder}")
+        os.system(f"cp -r {static_output_folder} {destination_subfolder}")
+        os.chdir(destination_repo)
+        os.system("git remote set-url origin https://github.com/GiorgioMeschi/ml-viewer.git")
+        commit_message = "Auto update: add new data files"
+        os.system("git add .")
+        os.system(f'git commit -m "{commit_message}"')
+        import subprocess
+        try:
+            subprocess.run(["git", "push", "origin", "main"], check=True)
+        except subprocess.CalledProcessError as e:
+            print("❌ Git push failed:", e)
+       
+
 
 
 if __name__ == '__main__':
 
     # get the current date
-    days = [31, 62, 93, 124, 155]  # days to go back for historical runs
+    days = [0]  # days to go back for historical runs
     for prev_day in days:
         date = dt.now() - timedelta(days=prev_day)  
 

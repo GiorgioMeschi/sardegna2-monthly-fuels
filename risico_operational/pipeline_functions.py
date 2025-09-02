@@ -15,9 +15,7 @@ import subprocess
 # import boto3
 import logging 
 from datetime import timedelta
-from risico_operational.settings import TILES_DIR
-
-VS = 'v1'
+from risico_operational.settings import TILES_DIR, VS
  
 
 # get raw files from the server for SPI and SPEI variables, check if they exist for that year_month, and return the path.
@@ -144,6 +142,12 @@ def clip_to_tiles(var, aggr, year: str, month: str, tile: str,
     os.makedirs(out_folder, exist_ok=True)
     wgs_file = os.path.join(out_folder, f'{var}_{aggr}m_orig.tif')
     reproj_out_file = os.path.join(out_folder, f'{var}_{aggr}m_bilinear_epsg32632.tif') # out filename
+
+    # clean files if already existing
+    if os.path.exists(wgs_file):
+        os.remove(wgs_file)
+    if os.path.exists(reproj_out_file):
+        os.remove(reproj_out_file)
 
     # clip and reproject
     tile_geom = tile_df[tile_df['id_sorted'] == int(tile[5:])].geometry.values[0]

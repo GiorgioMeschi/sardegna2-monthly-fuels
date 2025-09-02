@@ -15,7 +15,7 @@ Raster = gt.Raster()
 
 vs_susc = 'v1'
 folder_susc = f'{DATAPATH}/susceptibility/{vs_susc}'
-susc_names = [i for i in os.listdir(folder_susc) if i.endswith('.tif')]
+susc_names = [i for i in os.listdir(folder_susc) if i.endswith('.tif') and not i.endswith('raw.tif')]
 threashold_file = f'{DATAPATH}/susceptibility/{vs_susc}/thresholds/thresholds.json'
 thresholds = json.load(open(threashold_file))
 tr1, tr2 = thresholds['lv1'], thresholds['lv2']
@@ -30,33 +30,37 @@ os.makedirs(ft_outfolder, exist_ok=True)
 
 # get hazards
 def hazard(susc_filename):
-    
-    susc_file = f"{folder_susc}/{susc_filename}"
-    hazard_filename = susc_filename.replace('susc', 'fuel')
+    try:
+        susc_file = f"{folder_susc}/{susc_filename}"
+        hazard_filename = susc_filename.replace('susc', 'fuel')
 
-    inputs = dict(
-        susc_path = susc_file,
-        thresholds= [tr1, tr2],
-        veg_path = veg_path,
-        mapping_path = mapping_path,
-        out_hazard_file = f"{out_folder}/{hazard_filename}"
-        )
-
-    _, susc_class, ft_arr = fft.hazard_12cl_assesment(**inputs)
-    # save
-    Raster.save_raster_as(susc_class, 
-                          f'{susc_class_oufolder}/{susc_filename}',
-                          susc_file, dtype = np.int8(), nodata =0)
-    
-    Raster.save_raster_as(susc_class, 
-                          f'{susc_class_oufolder}/{susc_filename}',
-                          susc_file, dtype = np.int8(), nodata =0)
-    
-    ft_filename = 'ft.tif'
-    if not os.path.exists(f'{ft_outfolder}/{ft_filename}'):
-        Raster.save_raster_as(ft_arr,
-                                f'{ft_outfolder}/{ft_filename}',
-                                susc_file, dtype = np.int8(), nodata =0)
+        inputs = dict(
+            susc_path = susc_file,
+            thresholds= [tr1, tr2],
+            veg_path = veg_path,
+            mapping_path = mapping_path,
+            out_hazard_file = f"{out_folder}/{hazard_filename}"
+            )
+        
+        # if not os.path.exists(f"{out_folder}/{hazard_filename}"):
+        _, susc_class, ft_arr = fft.hazard_12cl_assesment(**inputs)
+        # save
+        Raster.save_raster_as(susc_class, 
+                            f'{susc_class_oufolder}/{susc_filename}',
+                            susc_file, dtype = np.int8(), nodata =0)
+        
+        Raster.save_raster_as(susc_class, 
+                            f'{susc_class_oufolder}/{susc_filename}',
+                            susc_file, dtype = np.int8(), nodata =0)
+        
+        ft_filename = 'ft.tif'
+        if not os.path.exists(f'{ft_outfolder}/{ft_filename}'):
+            Raster.save_raster_as(ft_arr,
+                                    f'{ft_outfolder}/{ft_filename}',
+                                    susc_file, dtype = np.int8(), nodata =0)
+    except:
+        print(f"Error processing {susc_filename}")
+        return None
 
 import multiprocessing as mp
 with mp.Pool(processes=20) as pool:
@@ -106,5 +110,9 @@ Raster.save_raster_as(ft_arr,
 
 
 
+
 # %%
+
+
+
 
