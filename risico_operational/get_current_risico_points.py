@@ -59,6 +59,7 @@ TOPOGRAPHIC_DATA = f'{DATAPATH}/raw/dem' # path to the topographic data
 OUTPUT_DIR = f'{DATAPATH}/risico' # path to save the output files
 
 # if true go and change manually the current date of your choice and it will produce fuel map and risico points for that month
+# NOTE: if you are in a month m and there a re already the data for the end of the previous month (M-1) then select 60 days back to get to 60 days (this will use data of M-2 to get M-1)
 HISTORICAL_RUN = False 
 
 pyproj_path = pyproj.datadir.get_data_dir()
@@ -226,31 +227,26 @@ def pipeline(date):
         logging.info(f'{risico_outfile} created!!!')    
 
     
+        if HISTORICAL_RUN:
+            # rename susc with plus 1 month
+            new_month = month + 1
+            os.rename(merged_susc_file, merged_susc_file.replace(f'_{year}_{month}.tif', f'_{year}_{new_month}.tif'))
+    
         # generate png and move to viewer
-        dyn_output_folder, static_output_folder = plot_maps()
+        dyn_output_folder, static_output_folder = plot_maps(year, month, OUTPUT_DIR, HISTORICAL_RUN)
         name = 'sardegna-medstar'
-        destination_repo = f"{HOME}/viewer/ml-viewer"
-        destination_subfolder = os.path.join(destination_repo, "data", name) 
+        destination_folder = os.path.join( os.path.dirname(HOME), 'data_for_viewer' )
+        destination_subfolder = os.path.join(destination_folder, "data", name) 
+        os.makedirs(destination_subfolder, exist_ok=True)
         os.system(f"cp -r {dyn_output_folder} {destination_subfolder}")
         os.system(f"cp -r {static_output_folder} {destination_subfolder}")
-        os.chdir(destination_repo)
-        os.system("git remote set-url origin https://github.com/GiorgioMeschi/ml-viewer.git")
-        commit_message = "Auto update: add new data files"
-        os.system("git add .")
-        os.system(f'git commit -m "{commit_message}"')
-        import subprocess
-        try:
-            subprocess.run(["git", "push", "origin", "main"], check=True)
-        except subprocess.CalledProcessError as e:
-            print("❌ Git push failed:", e)
+
        
-
-
 
 if __name__ == '__main__':
 
     # get the current date
-    days = [0]  # days to go back for historical runs
+    days = [0]  # days to go back for historical runs (start with the most recent in order to not overwrite the old susceptibilities)
     for prev_day in days:
         date = dt.now() - timedelta(days=prev_day)  
 
@@ -259,12 +255,14 @@ if __name__ == '__main__':
             # if historical run, use the first day of the month
             OUTPUT_DIR = f'{OUTPUT_DIR}/RUN_HIST_{date_str}'
 
-        log_filename = f'{OUTPUT_DIR}/logs/pipeline_{date.strftime('%Y-%m-%d')}.log'
+        log_filename = f'{OUTPUT_DIR}/logs/logging.log'
         os.makedirs(os.path.dirname(log_filename), exist_ok=True)
         logging.basicConfig(level=logging.INFO,
                             format = '[%(asctime)s] %(filename)s: {%(lineno)d} %(levelname)s - %(message)s',
                             datefmt ='%H:%M:%S',
-                            filename = log_filename)
+                            filename = log_filename,
+                            filemode='w')
+        logging.info(f"datalog: {date.strftime('%Y-%m-%d')} \n")
         
         pipeline(date)
 
@@ -277,3 +275,5 @@ if __name__ == '__main__':
 
 
 # ras.save_raster_as(rio.open(dem_wgs_path).read(1), dem_wgs_path.replace('.tif', '_fixed.tif'), dem_wgs_path, dtype = 'float32')
+
+

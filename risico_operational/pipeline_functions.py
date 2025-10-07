@@ -24,7 +24,7 @@ def get_spi1_rawfile(date):
     aggr = 1
     year = date.strftime('%Y')
     month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
+    basep = f'/mnt/drought-ita-share/archive/Italy/SPI/MCM/maps/{year}/{month}'
     try:
         day = os.listdir(basep)[-1]
     except:
@@ -37,7 +37,7 @@ def get_spi3_rawfile(date):
     aggr = 3
     year = date.strftime('%Y')
     month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
+    basep = f'/mnt/drought-ita-share/archive/Italy/SPI/MCM/maps/{year}/{month}'
     try:
         day = os.listdir(basep)[-1]
     except:
@@ -50,7 +50,7 @@ def get_spi6_rawfile(date):
     aggr = 6
     year = date.strftime('%Y')
     month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month}'
+    basep = f'/mnt/drought-ita-share/archive/Italy/SPI/MCM/maps/{year}/{month}'
     try:
         day = os.listdir(basep)[-1]
     except:
@@ -63,7 +63,7 @@ def get_spei1_rawfile(date):
     aggr = 1
     year = date.strftime('%Y')
     month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
+    basep = f'/mnt/drought-ita-share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
     try:
         day = os.listdir(basep)[-1]
     except:
@@ -76,7 +76,7 @@ def get_spei3_rawfile(date):
     aggr = 3
     year = date.strftime('%Y')
     month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
+    basep = f'/mnt/drought-ita-share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
     try:
         day = os.listdir(basep)[-1]
     except:
@@ -89,7 +89,7 @@ def get_spei6_rawfile(date):
     aggr = 6
     year = date.strftime('%Y')
     month = date.strftime('%m')
-    basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
+    basep = f'/mnt/drought-ita-share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month}'
     try:
         day = os.listdir(basep)[-1]
     except:
@@ -121,19 +121,19 @@ def clip_to_tiles(var, aggr, year: str, month: str, tile: str,
                   tile_df: gpd.GeoDataFrame, current_year: str, current_month: str):
 
     '''
-    clip data on server drought to calabria and resample it to 20m resolution.
+    clip data on server drought and resample it to 20m resolution.
     it works for SPI and SPEI vars.
     '''
 
     # folderpath changes depending on the variables
     if var == 'SPI':
-        basep = f'/home/drought/drought_share/archive/Italy/{var}/MCM/maps/{year}/{month:02}'
+        basep = f'/mnt/drought-ita-share/archive/Italy/{var}/MCM/maps/{year}/{month:02}'
         day = os.listdir(basep)[-1]
         name = f'{var}{aggr}-MCM_{year}{month:02}{day}.tif'
         path = f'{basep}/{day}/{name}'
 
     elif var == 'SPEI':
-        basep = f'/home/drought/drought_share/archive/Italy/{var}/MCM-DROPS/maps/{year}/{month:02}'
+        basep = f'/mnt/drought-ita-share/archive/Italy/{var}/MCM-DROPS/maps/{year}/{month:02}'
         day = os.listdir(basep)[-1]
         name = f'{var}{aggr}-MCM-DROPS_{year}{month:02}{day}.tif'
         path = f'{basep}/{day}/{name}'

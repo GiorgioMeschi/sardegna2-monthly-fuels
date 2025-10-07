@@ -18,21 +18,22 @@ from risico_operational.settings import HOME, DATAPATH, VS
 #%%
 
 # define function to plug into get risico point operational function. 
-def plot_maps():
+def plot_maps(year, month, outdir, hist_run):
     """
     Plot the fuel maps, susceptibility, dynamic and static inputs.
     """
 
     #drought variables
-    year, month = datetime.now().year, datetime.now().month
-    month = month - 1 # previos month wrt the actual for the avaialble data
+    # year, month = datetime.now().year, datetime.now().month
+    if not hist_run:
+        month = month - 1 # previos month wrt the actual for the avaialble data
     aggrs = [1, 3, 6]  # aggregation in months
     savepath = f'{HOME}/fuel_maps/sardegna2-monthly-fuels/risico_operational/views/plot_maps/png'
 
     # SPI
     for aggr in aggrs:
 
-        basep = f'/home/drought/drought_share/archive/Italy/SPI/MCM/maps/{year}/{month:02}'
+        basep = f'/mnt/drought-ita-share/archive/Italy/SPI/MCM/maps/{year}/{month:02}'
 
         day = os.listdir(basep)[-1]
         name = f'SPI{aggr}-MCM_{year}{month:02}{day}.tif'
@@ -63,7 +64,7 @@ def plot_maps():
     #SPEI
     for aggr in aggrs:
 
-        basep = f'/home/drought/drought_share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month:02}'
+        basep = f'/mnt/drought-ita-share/archive/Italy/SPEI/MCM-DROPS/maps/{year}/{month:02}'
 
         day = os.listdir(basep)[-1]
         name = f'SPEI{aggr}-MCM-DROPS_{year}{month:02}{day}.tif'
@@ -97,16 +98,18 @@ def plot_maps():
 
 
     # fuel map
-    hazard_file = f'{DATAPATH}/risico/fuel12cl_wgs84.tif'
+    hazard_file = f'{outdir}/fuel12cl_wgs84.tif'
     crs = 'EPSG:4326'
     fires_file = f'{DATAPATH}/raw/burned_area/incendi_dpc_2007_2023_sardegna_32632.shp'
     fire_col = 'date_iso'
 
     # readt filename in metaata.txt
-    with open(f'{DATAPATH}/risico/metadata.txt', 'r') as f:
+    with open(f'{outdir}/metadata.txt', 'r') as f:
         meta = f.readlines()
         year = int(meta[0].strip().split('_')[1])
         month = int(meta[0].strip().split('_')[2])
+        if hist_run:
+            month = month + 1 # since the spi data are related to the month already in place.
     
     # year = 2025
     # month = 7
@@ -126,7 +129,7 @@ def plot_maps():
         season=             False,
         haz_nodata=         0,
         pixel_to_ha_factor= 1,
-        allow_hist=         True,
+        allow_hist=         False,
         allow_pie=          True,
         allow_fires=        False,
     )
@@ -143,11 +146,12 @@ def plot_maps():
     # reproject the susc in epsg4326 to plot not distorted
     dem_file = f'{DATAPATH}/raw/dem/dem_ispra_100m_wgs84.tif'
     susc_path_wgs = f'{DATAPATH}/susceptibility/{VS}/susc_{year}_{month}_wgs84.tif'
-    if not os.path.exists(susc_path_wgs):
-        Ras.reproject_raster_as_v2(in_file=susc_path,
-                                out_file=susc_path_wgs,
-                                    reference_file=dem_file, 
-                                    input_crs = 'EPSG:32632', working_crs = 'EPSG:4326', interpolation = 'near')
+    if os.path.exists(susc_path_wgs):
+        os.remove(susc_path_wgs)
+    Ras.reproject_raster_as_v2(in_file=susc_path,
+                            out_file=susc_path_wgs,
+                                reference_file=dem_file, 
+                                input_crs = 'EPSG:32632', working_crs = 'EPSG:4326', interpolation = 'near')
 
 
     settings = dict(
@@ -155,10 +159,10 @@ def plot_maps():
         fires_col= 'date_iso', # 'finaldate',
         crs= 'epsg:4326',
         susc_path= susc_path_wgs,
-        xboxmin_hist= 0.2,
+        xboxmin_hist= 0.1,
         yboxmin_hist= 0.1,
-        xboxmin_pie= 0.2,
-        yboxmin_pie= 0.79,
+        xboxmin_pie= 0.1,
+        yboxmin_pie= 0.7,
         threshold1= tr1,
         threshold2= tr2,
         out_folder= ouput_folder,
