@@ -45,7 +45,7 @@ from risico_operational.pipeline_functions import (get_spei1_rawfile, get_spei3_
                                                     clip_to_tiles, merge_susc_tiles, generate_fuel_map,
                                                     write_risico_files, reproject_raster_as, remove_borders)
 
-from risico_operational.views.plot_maps.plot import plot_maps
+from risico_operational.plot import plot_maps
 
 
 #%%

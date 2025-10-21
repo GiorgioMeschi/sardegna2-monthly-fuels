@@ -28,7 +28,7 @@ def plot_maps(year, month, outdir, hist_run):
     if not hist_run:
         month = month - 1 # previos month wrt the actual for the avaialble data
     aggrs = [1, 3, 6]  # aggregation in months
-    savepath = f'{HOME}/fuel_maps/sardegna2-monthly-fuels/risico_operational/views/plot_maps/png'
+    savepath = f'{HOME}/streamlit_view'
 
     # SPI
     for aggr in aggrs:
@@ -113,6 +113,18 @@ def plot_maps(year, month, outdir, hist_run):
     
     # year = 2025
     # month = 7
+
+    # save csv with percentage of class 
+    with rio.open(hazard_file) as haz:
+        haz_arr = haz.read(1)
+        haz_ndoata = haz.nodata
+        unique, counts = np.unique(haz_arr, return_counts=True)
+        total_pixels = np.where(haz_arr==haz_ndoata, 0, 1).sum()
+        percentages = {int(k): int((v / total_pixels) * 100) for k, v in zip(unique, counts) if k != haz_ndoata}
+    with open(f'{ouput_folder}/fuel_percentage.csv', 'w') as f:
+        f.write('Fuel_Class,Percentage\n')
+        for k, v in percentages.items():
+            f.write(f'{k},{v}\n')
 
     settings = dict(
         fires_file=         fires_file,
